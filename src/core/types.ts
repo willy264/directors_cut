@@ -28,6 +28,7 @@ export interface ActionParams {
     readonly outcomes: readonly string[];
     readonly predictionWindowSeconds: number;
   };
+  /** Legacy hasDelay=true is rejected: the current clip API has no delay option. */
   create_clip: { readonly hasDelay?: boolean };
   create_marker: { readonly description: string };
   shoutout: { readonly toBroadcasterId: string };
@@ -112,6 +113,9 @@ export interface Execution {
     | "reverting"
     | "reverted";
   readonly expect?: ConfirmationExpectation;
+  /** The original write was accepted, observed, or may have partially applied. */
+  readonly mayHaveApplied?: boolean;
+  readonly error?: string;
 }
 
 export interface Round {
@@ -128,6 +132,12 @@ export interface Round {
   readonly snapshot?: ChannelSnapshot;
   readonly revert?: ReversibleAction;
   readonly execution?: Execution;
+  /** Kept separately so late original events cannot confirm a rollback. */
+  readonly rollback?: Execution;
+  readonly pendingExecutionId?: ExecutionId;
+  readonly awaitingApproval?: boolean;
+  readonly error?: string;
+  readonly refundedProposalIds?: readonly ProposalId[];
 }
 
 export interface EngineConfig {
@@ -176,6 +186,8 @@ export interface ValidationContext {
   readonly roundId?: RoundId;
   readonly proposalId?: ProposalId;
   readonly approval?: StreamerApproval;
+  /** Proposal collection checks eligibility; execution additionally needs approval. */
+  readonly mode?: "proposal" | "execution";
 }
 
 export type ValidationErrorCode =
@@ -206,6 +218,8 @@ export type Result<T, E> = Ok<T> | Err<E>;
 export interface EngineState {
   readonly round: Round | null;
   readonly context: ValidationContext;
+  /** Bounded replay protection, in arrival order. Adapter also deduplicates Twitch. */
+  readonly processedEventIds?: readonly string[];
 }
 
 /** Adapter-created IDs/time make replay deterministic; the core generates neither. */
@@ -213,7 +227,8 @@ export type CoreEvent = { readonly id: string; readonly at: Timestamp } & (
   | { readonly t: "round_opened"; readonly roundId: RoundId }
   | { readonly t: "proposal_submitted"; readonly proposal: Proposal }
   | { readonly t: "vote_cast"; readonly roundId: RoundId; readonly proposalId: ProposalId; readonly userId: UserId }
-  | { readonly t: "round_closed"; readonly roundId: RoundId; readonly executionId: ExecutionId }
+  /** force is supplied only by the authenticated control adapter, never chat. */
+  | { readonly t: "round_closed"; readonly roundId: RoundId; readonly executionId: ExecutionId; readonly force?: boolean }
   | { readonly t: "snapshot_ready"; readonly roundId: RoundId; readonly executionId: ExecutionId; readonly snapshot: ChannelSnapshot }
   | { readonly t: "execution_accepted"; readonly roundId: RoundId; readonly executionId: ExecutionId; readonly purpose: ExecutionPurpose; readonly expect: ConfirmationExpectation }
   | { readonly t: "execution_confirmed"; readonly roundId: RoundId; readonly executionId: ExecutionId; readonly purpose: ExecutionPurpose; readonly confirmation: Confirmation }
