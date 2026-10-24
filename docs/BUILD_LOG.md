@@ -15,6 +15,7 @@ Additional review tests exposed actual integration defects:
 - Subscription setup could finish after stop and resurrect a dead connection. Generation and transport checks prevent stale async completions from marking it connected.
 - Starting the next round while refunds were in flight could drop a losing redemption. Refund work now captures redemptions before awaiting requests.
 - A confirmed title updated the provider but left the channel card stale. Only a successfully correlated confirmation now updates displayed channel facts.
+- Live-setup review found that one failed periodic Twitch read could permanently block controls: subsequent refreshes ran only while connected. Background reads now recover on the next refresh while writes stay blocked. Related EventSub handler failures now reconnect with backoff, while rejected authorization/configuration stops retries. Fifteen regression cases cover recovery, stale completions, stopped/revoked sessions and notification deduplication.
 
 Regression tests are in `test/effects` and `test/server`; the HTTP title/undo test also verifies three distinct voters and repeat-vote deduplication.
 

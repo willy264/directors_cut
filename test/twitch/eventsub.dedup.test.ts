@@ -71,6 +71,103 @@ describe("EventSub metadata and lifecycle", () => {
     await vi.advanceTimersByTimeAsync(4_000); expect(sockets).toHaveLength(2);
     client.stop();
   });
+  it.each([0, 408, 429, 503])("reconnects after a transient welcome handler failure (status %s)", async status => {
+    vi.useFakeTimers();
+    const sockets: Socket[] = [];
+    const failure = Object.assign(new Error("Temporary subscription setup failure"), {status});
+    const onWelcome = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue(undefined);
+    const client = new EventSubClient({now: () => now, onWelcome, onNotification: vi.fn(), onStatus: vi.fn(),
+      webSocketFactory: () => {const socket = new Socket(); sockets.push(socket); return socket;} });
+    client.start(); sockets[0]!.welcome("failed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sockets[0]!.closed).toBe(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.welcome("recovered");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onWelcome.mock.calls).toEqual([["failed", false], ["recovered", false]]);
+    client.stop();
+  });
+  it("backs off repeated welcome failures until a session finishes setup", async () => {
+    vi.useFakeTimers();
+    const sockets: Socket[] = [];
+    const onWelcome = vi.fn().mockRejectedValueOnce(new Error("First failure"))
+      .mockRejectedValueOnce(new Error("Second failure")).mockResolvedValue(undefined);
+    const client = new EventSubClient({now: () => now, onWelcome, onNotification: vi.fn(), onStatus: vi.fn(),
+      webSocketFactory: () => {const socket = new Socket(); sockets.push(socket); return socket;} });
+    client.start(); sockets[0]!.welcome("first");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.welcome("second");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(3);
+    sockets[2]!.welcome("success");
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[2]!.close();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(4);
+    client.stop();
+  });
+  it("resubscribes after notification failure without replaying the handled event", async () => {
+    vi.useFakeTimers();
+    const sockets: Socket[] = [];
+    const onWelcome = vi.fn();
+    const onNotification = vi.fn().mockRejectedValueOnce(new Error("Read failed after processing input"));
+    const client = new EventSubClient({now: () => now, onWelcome, onNotification, onStatus: vi.fn(),
+      webSocketFactory: () => {const socket = new Socket(); sockets.push(socket); return socket;} });
+    const payload = {subscription: {type: "channel.update"}, event: {broadcaster_user_id: "123", title: "After", category_id: "1"}};
+    client.start(); sockets[0]!.welcome("first");
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0]!.message("processed", "notification", payload);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.welcome("recovered");
+    sockets[1]!.message("processed", "notification", payload);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onNotification).toHaveBeenCalledTimes(1);
+    expect(onWelcome.mock.calls).toEqual([["first", false], ["recovered", false]]);
+    client.stop();
+  });
+  it.each([400, 401, 403, 404])("stops automatic recovery for persistent handler status %s", async status => {
+    vi.useFakeTimers();
+    const sockets: Socket[] = [];
+    const onStatus = vi.fn();
+    const onWelcome = vi.fn().mockRejectedValue(Object.assign(new Error("Authorization or configuration rejected"), {status}));
+    const client = new EventSubClient({now: () => now, onWelcome, onNotification: vi.fn(), onStatus,
+      webSocketFactory: () => {const socket = new Socket(); sockets.push(socket); return socket;} });
+    client.start(); sockets[0]!.welcome("rejected");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets[0]!.closed).toBe(true);
+    expect(sockets).toHaveLength(1);
+    expect(onStatus).toHaveBeenLastCalledWith({state: "error", message: expect.stringMatching(/reconnect/i)});
+    client.stop();
+  });
+  it.each(["stopped", "retired"] as const)("ignores a late handler rejection from a %s socket", async previousState => {
+    vi.useFakeTimers();
+    const sockets: Socket[] = [];
+    const onStatus = vi.fn();
+    let reject!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, rejectPromise) => {reject = rejectPromise;});
+    const onWelcome = vi.fn().mockImplementationOnce(() => pending).mockResolvedValue(undefined);
+    const client = new EventSubClient({now: () => now, onWelcome, onNotification: vi.fn(), onStatus,
+      webSocketFactory: () => {const socket = new Socket(); sockets.push(socket); return socket;} });
+    client.start(); sockets[0]!.welcome("previous");
+    if (previousState === "stopped") client.stop();
+    else {
+      sockets[0]!.message("migration", "session_reconnect", {session: {reconnect_url: "wss://eventsub.wss.twitch.tv/ws?token=move"}});
+      sockets[1]!.welcome("current");
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    const statusCount = onStatus.mock.calls.length;
+    reject(new Error("Late setup failure"));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onStatus).toHaveBeenCalledTimes(statusCount);
+    expect(sockets).toHaveLength(previousState === "stopped" ? 1 : 2);
+    if (previousState === "retired") expect(sockets[1]!.closed).toBe(false);
+    client.stop();
+  });
   it("selects subscriptions using granted manage scopes and account eligibility", () => {
     const subscriptions = buildSubscriptions("123", "123", ["user:read:chat", "channel:manage:polls", "channel:manage:predictions", "moderator:manage:shoutouts"], true);
     expect(subscriptions).toContainEqual({type: "channel.poll.begin", version: "1", condition: {broadcaster_user_id: "123"}});

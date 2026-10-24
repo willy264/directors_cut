@@ -21,6 +21,8 @@ export class LiveProvider implements ActionProvider {
   private unsubscribeRewards: (() => void) | undefined;
   private generation = 0;
   private transportEpoch = 0;
+  private factsRecoveryEpoch: number | undefined;
+  private factsRefresh: symbol | undefined;
   private redemptionEvents = new Set<string>();
   constructor(readonly config: AppConfig) {
     this.auth = new OAuthManager({ clientId: config.clientId, clientSecret: config.clientSecret, redirectUri: config.redirectUri, scopes: config.scopes, tokenStorePath: config.tokenStorePath });
@@ -64,6 +66,7 @@ export class LiveProvider implements ActionProvider {
         if (generation !== this.generation || epoch !== this.transportEpoch) return;
         await this.refreshFacts();
         if (generation !== this.generation || epoch !== this.transportEpoch) return;
+        this.factsRecoveryEpoch = undefined;
         this.director.setConnection("connected");
         this.director.note(isMigration ? "Twitch connection migrated; current channel state reconciled." : "Twitch connected and channel state synchronized.");
       },
@@ -71,6 +74,7 @@ export class LiveProvider implements ActionProvider {
         if (generation !== this.generation) return;
         if (status.state === "connected") return; // onWelcome includes subscription setup and resync.
         this.transportEpoch++;
+        this.factsRecoveryEpoch = undefined;
         this.director.setConnection(status.state === "connecting" || status.state === "reconnecting" ? "connecting" : status.state === "error" || status.state === "revoked" ? "error" : "disconnected", status.message || "");
       },
       onRevocation: async subscription => {
@@ -94,16 +98,45 @@ export class LiveProvider implements ActionProvider {
           } catch (error) { this.director.note(`Chat proposal: ${errorMessage(error)}`, "info"); }
         }
         if (type === "channel.channel_points_custom_reward_redemption.add") await this.redemption(event);
-        if (["channel.update", "stream.online", "stream.offline", "channel.poll.end", "channel.prediction.end"].includes(type)) await this.refreshFacts();
+        if (["channel.update", "stream.online", "stream.offline", "channel.poll.end", "channel.prediction.end"].includes(type)) await this.refreshInBackground();
       },
     });
     this.socket.start();
     this.auth.startValidation(error => { this.socket?.stop(); this.director.setConnection("error", error.message); });
-    this.tick = setInterval(() => { if (this.director.connection === "connected") void this.refreshFacts().catch(error => this.director.setConnection("error", errorMessage(error))); }, 30000);
+    this.tick = setInterval(() => { void this.refreshInBackground(); }, 30000);
+  }
+  private async refreshInBackground(): Promise<void> {
+    const generation = this.generation;
+    const epoch = this.transportEpoch;
+    if (this.factsRefresh || (this.director.connection !== "connected" && this.factsRecoveryEpoch !== epoch)) return;
+    const refresh = Symbol("facts-refresh");
+    this.factsRefresh = refresh;
+    const current = () => generation === this.generation && epoch === this.transportEpoch;
+    try {
+      await this.refreshFacts();
+      if (current() && this.factsRecoveryEpoch === epoch) {
+        this.factsRecoveryEpoch = undefined;
+        this.director.setConnection("connected");
+        this.director.note("Twitch channel state refreshed. Controls are available again.");
+      }
+    } catch (error) {
+      if (!current()) return;
+      const status = error instanceof Error && "status" in error ? Number(error.status) : 0;
+      if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        this.stop();
+        this.director.setConnection("error", `Channel state could not be refreshed: ${errorMessage(error)}. Resolve authorization or configuration, then connect Twitch again.`);
+        return;
+      }
+      this.factsRecoveryEpoch = epoch;
+      this.director.setConnection("error", "Twitch channel state is temporarily unavailable. Controls are paused; reads will retry automatically.");
+    } finally {
+      if (this.factsRefresh === refresh) this.factsRefresh = undefined;
+    }
   }
   async refreshFacts(): Promise<void> {
     if (!this.identityId) return;
     const generation = this.generation;
+    const epoch = this.transportEpoch;
     const scopes = new Set(this.auth.identity?.scopes || []);
     const allowedActions = new Set(this.config.enabledActions.filter(kind => scopes.has(ACTION_SCOPES[kind])
       && (kind !== "snooze_ad" || scopes.has("channel:read:ads"))
@@ -115,7 +148,7 @@ export class LiveProvider implements ActionProvider {
       this.eligible && scopes.has("channel:read:ads") ? this.helix.getAdSchedule(this.identityId) : null,
     ]);
     const prediction = predictions.find(item => ["ACTIVE", "LOCKED"].includes(item.status));
-    if (generation !== this.generation) return;
+    if (generation !== this.generation || epoch !== this.transportEpoch) return;
     const patch: Partial<ValidationContext> = { broadcasterId: this.identityId, isLive: Boolean(stream), channel, allowedActions,
       rateLimit: this.helix.rateLimit, activePollId: polls.find(item => item.status === "ACTIVE")?.id || null,
       activePredictionId: prediction?.id || null, predictionOutcomeIds: prediction?.outcomes.map(item => item.id) || [], adSnoozesRemaining: ads?.snooze_count || 0 };
@@ -197,5 +230,5 @@ export class LiveProvider implements ActionProvider {
     try { await this.helix.updateRedemption(this.identityId, redemption.rewardId, redemption.redemptionId, "FULFILLED"); }
     catch (error) { throw new Error(`Check redemption ${redemption.redemptionId} manually: ${errorMessage(error)}`); }
   }
-  stop(): void { this.generation++; this.transportEpoch++; this.socket?.stop(); this.auth.stopValidation(); if (this.tick) clearInterval(this.tick); this.unsubscribeRewards?.(); this.unsubscribeRewards = undefined; this.director?.setConnection("disconnected"); }
+  stop(): void { this.generation++; this.transportEpoch++; this.factsRecoveryEpoch = undefined; this.factsRefresh = undefined; this.socket?.stop(); this.auth.stopValidation(); if (this.tick) clearInterval(this.tick); this.unsubscribeRewards?.(); this.unsubscribeRewards = undefined; this.director?.setConnection("disconnected"); }
 }
