@@ -84,6 +84,8 @@ The engine is pure: supplied facts and an input event produce new state and comm
 
 EventSub handles welcome, watchdogs, deduplication, migration, unexpected reconnects and revocation. The adapter reconciles channel state when reconnecting. Resource IDs, broadcaster, expected fields and execution timing correlate confirmations; authoritative Helix reads can recover missed events. Write requests are never retried after ambiguous network failures. A rejected HTTP 401 may be retried once after refreshing authorization. A rate-limit response stops retries.
 
+A temporary background read failure pauses controls and retries the read on the next 30-second refresh. Successful reconciliation restores controls. Transient EventSub setup/handler failures establish a fresh session with backoff; authorization/configuration failures require reconnecting after resolving their cause. Stopping or revoking a session prevents a late recovery response from restoring access.
+
 Each reduced event and its checkpoint are appended before commands run. Startup restores the latest valid checkpoint without reissuing writes. An interrupted round becomes failed and asks the streamer to inspect Twitch. Demo and live use separate default logs. A truncated final append is repaired; corruption in earlier records stops startup. This is single-process storage: run one instance per event log and broadcaster.
 
 The visible feed contains the current process's recent outcomes; the JSONL journal retains recorded event history. If a write or restore cannot be verified, inspect the actual Twitch channel before continuing. Default confirmation time is eight seconds, with longer windows for clips and raids. Shoutouts enforce at least two minutes globally and sixty minutes per target.

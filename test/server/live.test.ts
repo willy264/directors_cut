@@ -78,6 +78,52 @@ describe("Live Twitch wiring", () => {
     finish(); await ready;
     expect(director.connection).not.toBe("connected");
   });
+  it("recovers after a transient facts refresh failure without issuing Twitch writes", async () => {
+    const {provider, director} = setup();
+    await provider.connect();
+    await transport.connections[0]!.onWelcome("session", false);
+    const channel = vi.mocked(provider.helix.getChannel);
+    const write = vi.spyOn(provider.helix, "execute");
+    channel.mockRejectedValueOnce(new Error("Temporary Twitch read failure"));
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(director.connection).not.toBe("connected");
+    await expect(provider.execute({kind: "set_title", params: {title: "Blocked while facts are stale"}})).rejects.toThrow();
+    const readsAfterFailure = channel.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(channel.mock.calls.length).toBeGreaterThan(readsAfterFailure);
+    expect(director.connection).toBe("connected");
+    expect(write).not.toHaveBeenCalled();
+  });
+  it.each(["stop", "revocation"] as const)("cannot resurrect a session after %s interrupts facts recovery", async reason => {
+    const {provider, director} = setup();
+    await provider.connect();
+    const callbacks = transport.connections[0]!;
+    await callbacks.onWelcome("session", false);
+    const channel = vi.mocked(provider.helix.getChannel);
+    channel.mockRejectedValueOnce(new Error("Temporary Twitch read failure"));
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => {finish = resolve;});
+    channel.mockImplementationOnce(async () => {
+      await pending;
+      return {broadcasterId: "100", title: "Recovered", categoryId: "200", capturedAt: Date.now()};
+    });
+    const readsAfterFailure = channel.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(channel.mock.calls.length).toBeGreaterThan(readsAfterFailure);
+    if (reason === "stop") provider.stop();
+    else await callbacks.onRevocation?.({type: "channel.chat.message", status: "authorization_revoked"});
+    const updatesAtStop = director.updateContext.mock.calls.length;
+
+    finish();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(director.connection).not.toBe("connected");
+    expect(director.updateContext).toHaveBeenCalledTimes(updatesAtStop);
+    await expect(provider.execute({kind: "set_title", params: {title: "No late write"}})).rejects.toThrow();
+  });
   it("limits non-Affiliate channels to capabilities actually available to that account", async () => {
     const {provider, director} = setup(["user:read:chat", "channel:manage:broadcast", "channel:manage:polls", "channel:manage:predictions", "channel:manage:ads"], false);
     await provider.connect();

@@ -90,7 +90,7 @@ export class EventSubClient {
     const connection: Connection = { socket, migration, welcomed: false, retiring: false, keepaliveMs: 15_000 };
     if (migration) this.migrating = connection; else this.active = connection;
     this.watch(connection);
-    socket.on("message", (raw) => { void this.receive(connection, raw.toString()).catch(() => this.options.onStatus({ state: "error", message: "EventSub handler failed" })); });
+    socket.on("message", (raw) => { void this.receive(connection, raw.toString()).catch(error => this.handlerFailed(connection, error)); });
     socket.on("error", () => {
       this.options.onStatus({ state: "error", message: "EventSub connection error" });
       socket.terminate();
@@ -104,6 +104,19 @@ export class EventSubClient {
       // If a migration is still connecting, allow its welcome to take ownership.
       if (!this.active && !this.migrating) this.scheduleReconnect();
     });
+  }
+  private handlerFailed(connection: Connection, error: unknown): void {
+    // Pending callbacks from a stopped, closed or migrated session cannot change the current session.
+    if (this.stopped || connection.retiring || (this.active !== connection && this.migrating !== connection)) return;
+    const status = error !== null && typeof error === "object" && "status" in error ? Number(error.status) : 0;
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+      this.stop();
+      this.options.onStatus({ state: "error", message: `EventSub setup or handler was rejected (HTTP ${status}). Reconnect after resolving authorization or configuration.` });
+      return;
+    }
+    this.options.onStatus({ state: "error", message: "EventSub handler failed; reconnecting and refreshing channel state" });
+    // The close path starts a new subscription session. Never replay the failed notification.
+    connection.socket.terminate();
   }
   private watch(connection: Connection): void {
     if (connection.watchdog) clearTimeout(connection.watchdog);
@@ -142,10 +155,10 @@ export class EventSubClient {
             previous.socket.close();
           }
         }
-        this.attempts = 0;
         this.options.onStatus({ state: "connected" });
         // Migrated sessions retain subscriptions: caller must not recreate them.
         await this.options.onWelcome(payload.session.id, connection.migration);
+        if (!this.stopped && !connection.retiring && this.active === connection) this.attempts = 0;
         break;
       }
       case "session_keepalive": break;
