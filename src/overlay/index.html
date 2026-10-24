@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" class="overlay-document">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Director’s Cut — OBS overlay</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script type="module" src="/assets/overlay.js"></script>
+  </head>
+  <body class="overlay-body">
+    <main class="broadcast-card" aria-label="Director’s Cut audience controls">
+      <header class="broadcast-header"><div class="brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>director’s cut<span class="brand-period">.</span></span></div><span class="mode-tag" id="overlay-mode">CONNECTING</span></header>
+      <div class="overlay-warning" id="overlay-warning" role="status">Connecting to the control room…</div>
+      <section class="broadcast-round"><div class="broadcast-round-top"><div><p class="eyebrow" id="overlay-phase">WAITING IN THE WINGS</p><h1 id="overlay-heading">Chat takes the controls.</h1></div><div class="broadcast-timer" id="overlay-timer">—</div></div><div class="progress-track" aria-hidden="true"><div id="overlay-progress"></div></div><div class="broadcast-meta"><span id="overlay-round-id">NEXT ROUND SOON</span><span id="overlay-quorum">PROPOSE · VOTE · DIRECT</span></div><ol class="broadcast-proposals" id="overlay-proposals"></ol><p class="broadcast-instruction" id="overlay-instruction">The director will open the floor soon.</p></section>
+      <section class="broadcast-result" aria-labelledby="result-label"><div class="result-icon" aria-hidden="true">↗</div><div><p class="eyebrow" id="result-label">DIRECTOR’S LOG</p><p id="overlay-result">Waiting for the first verified action.</p><p class="result-credit" id="overlay-credit">Your next great idea could make the cut.</p></div></section>
+      <footer class="broadcast-footer"><span>THE AUDIENCE DIRECTS.</span><span>THE STREAMER CAN ALWAYS CALL CUT.</span></footer>
+    </main>
+  </body>
+</html>

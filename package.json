@@ -13,7 +13,12 @@
     "onlyBuiltDependencies": ["esbuild"]
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/server/main.ts",
+    "demo": "tsx src/server/main.ts --demo",
+    "live": "tsx src/server/main.ts --live",
+    "start": "node dist/server/main.js",
+    "start:live": "node dist/server/main.js --live",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
