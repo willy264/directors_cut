@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#151715" />
+    <title>Director’s Cut — Control room</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script type="module" src="/assets/dashboard.js"></script>
+  </head>
+  <body class="dashboard">
+    <a class="skip-link" href="#main">Skip to control room</a>
+    <div class="app-shell">
+      <header class="masthead">
+        <a class="brand" href="/" aria-label="Director’s Cut home">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>director’s cut<span class="brand-period">.</span></span>
+        </a>
+        <div class="masthead-right"><span class="mode-tag" id="mode-tag">CONNECTING</span><a class="quiet-link" href="/overlay" target="_blank" rel="noopener noreferrer">Open overlay <span aria-hidden="true">↗</span></a></div>
+      </header>
+
+      <div class="mode-banner" id="mode-banner" role="status">Connecting to your local control room…</div>
+
+      <main id="main">
+        <section class="intro" aria-labelledby="page-title">
+          <div><p class="eyebrow"><span class="short-line"></span> YOUR STREAM. THEIR DIRECTION.</p><h1 id="page-title">Give chat the controls.<br /><em>Keep the final cut.</em></h1><p class="intro-copy">The audience proposes. The room votes.<br class="mobile-break" /> You decide when to call cut.</p></div>
+          <div class="connection-card">
+            <div class="connection-label"><span class="status-dot" id="connection-dot"></span><span id="connection-status">Connecting</span><span class="small-mono">CHANNEL / 01</span></div>
+            <p class="channel-name" id="channel-name">Your control room</p>
+            <p class="channel-title" id="channel-title">Waiting for channel information.</p>
+            <div class="connection-bottom"><span class="tiny-label" id="channel-category">TWITCH CONNECTION</span><a class="connect-link" id="connect-link" href="/auth/start">Connect Twitch <span aria-hidden="true">↗</span></a></div>
+          </div>
+        </section>
+
+        <div class="notice" id="notice" role="status" hidden></div>
+
+        <div class="workspace-grid">
+          <section class="panel round-panel" aria-labelledby="round-heading">
+            <div class="panel-topline"><p class="eyebrow">01 / THE FLOOR</p><span class="phase-tag" id="phase-tag">STANDBY</span></div>
+            <div class="round-heading-row"><div><h2 id="round-heading">Ready when you are.</h2><p class="section-copy" id="round-description">Open a round and let your audience make a proposal.</p></div><div class="timer" id="timer" aria-label="Time remaining"><span id="timer-value">—</span><span class="timer-unit" id="timer-unit">SECONDS</span></div></div>
+            <div class="progress-track" aria-hidden="true"><div id="round-progress"></div></div>
+            <div class="round-meta"><span id="round-reference">NO ACTIVE ROUND</span><span id="quorum-label">— VOTES TO PASS</span></div>
+            <div id="proposal-list" class="proposal-list"><div class="empty-state"><span class="empty-icon" aria-hidden="true">↗</span><p>The next move starts here.</p><span>Proposals will appear here when a round opens.</span></div></div>
+            <div class="round-actions"><button class="button button-primary" id="open-round" type="button" disabled>Open the floor <span aria-hidden="true">↗</span></button><button class="button button-secondary" id="close-round" type="button" disabled hidden>Close voting</button><button class="button button-danger" id="veto-round" type="button" disabled>Call cut</button></div>
+            <p class="footnote" id="round-footnote">Only a confirmed result appears in the Director’s Log.</p>
+          </section>
+
+          <aside class="panel proposal-panel" aria-labelledby="composer-heading">
+            <div class="panel-topline"><p class="eyebrow">02 / MAKE A MOVE</p><span class="tiny-label" id="composer-role">STREAMER</span></div>
+            <h2 id="composer-heading">Put it to the room.</h2><p class="section-copy">Submit an action for this round.</p>
+            <div class="demo-viewer" id="demo-viewer" hidden><label for="viewer-select">Simulated viewer</label><select id="viewer-select"><option value="demo-alex">Alex / viewer 01</option><option value="demo-jules">Jules / viewer 02</option><option value="demo-rio">Rio / viewer 03</option><option value="demo-sam">Sam / viewer 04</option><option value="demo-morgan">Morgan / viewer 05</option></select><p class="field-hint">Choose different viewers to try distinct votes. These are simulated identities.</p></div>
+            <form id="proposal-form"><fieldset id="proposal-fieldset" disabled><div class="field"><label for="action-kind">Channel action</label><select id="action-kind" name="kind"><option value="set_title">Change the title</option></select></div><div id="action-fields"></div><p class="gate-note" id="gate-note" hidden>This action requires your explicit approval after voting. It cannot be undone.</p><button class="button button-primary submit-proposal" id="submit-proposal" type="submit">Submit proposal <span aria-hidden="true">+</span></button></fieldset></form>
+            <p class="footnote" id="composer-hint">Open a round to submit a proposal.</p>
+          </aside>
+        </div>
+
+        <section class="panel log-panel" aria-labelledby="log-heading">
+          <div class="log-heading"><div><p class="eyebrow">03 / IN THE RECORD</p><h2 id="log-heading">Director’s Log<span class="heading-period">.</span></h2></div><span class="tiny-label" id="log-status">WAITING FOR THE FIRST TAKE</span></div>
+          <ol class="activity-list" id="activity-list"><li class="log-empty"><span aria-hidden="true">✳</span><div><p>A record of what actually happened.</p><span>Verified actions, failed attempts, and cuts appear here with clear status.</span></div></li></ol>
+        </section>
+
+        <div class="bottom-grid">
+          <details class="panel settings-panel"><summary><span><span class="eyebrow">THE GUARDRAILS</span><span class="summary-title">Set the room’s rules.</span></span><span class="details-plus" aria-hidden="true">+</span></summary><form id="settings-form"><fieldset id="settings-fieldset" disabled><div class="settings-fields"><div class="field"><label for="quorum">Votes to pass</label><input id="quorum" name="quorum" type="number" min="1" max="1000" step="1" required value="3" /></div><div class="field"><label for="round-window">Round length <span>(sec)</span></label><input id="round-window" name="roundWindow" type="number" min="5" max="300" step="1" required value="25" /></div><div class="field"><label for="cooldown">Cooldown <span>(sec)</span></label><input id="cooldown" name="cooldown" type="number" min="0" max="3600" step="1" required value="10" /></div></div><button class="button button-secondary" type="submit">Save for next round</button></fieldset></form><p class="field-hint">Updates apply to future rounds. A vote counts once per viewer, per proposal.</p></details>
+          <section class="panel help-panel" aria-labelledby="help-heading"><p class="eyebrow">PASS THE MIC</p><h2 id="help-heading">Invite chat into the booth.</h2><p class="section-copy" id="chat-help">Connect Twitch to accept proposals and votes from your audience.</p><div class="chat-example"><span class="tiny-label">IN TWITCH CHAT</span><code id="chat-command">!propose &lt;round-id&gt; title Your next stream title</code><code id="vote-command">!vote &lt;round-id&gt; &lt;proposal-id&gt;</code></div><a class="quiet-link" href="/overlay" target="_blank" rel="noopener noreferrer">Preview your OBS overlay <span aria-hidden="true">↗</span></a></section>
+        </div>
+      </main>
+
+      <footer class="footer"><span>DIRECTOR’S CUT <span class="footer-divider">/</span> AUDIENCE POWER, WITH A CUT BUTTON.</span><span class="transport-status"><span class="status-dot" id="transport-dot"></span><span id="transport-status">Connecting to local service</span></span></footer>
+    </div>
+    <div class="sr-only" id="live-announcement" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>

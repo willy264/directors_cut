@@ -1,8 +1,8 @@
 # Director's Cut
 
 The user-provided plan is in [docs/DIRECTORS_CUT_SPEC.md](docs/DIRECTORS_CUT_SPEC.md).
-Follow the active user request when it narrows that plan; the current deliverable
-is a scaffold with function stubs.
+Follow the active user request when it narrows that plan. The repository now
+contains a runnable local service with demo and live Twitch adapters.
 
 - Use pnpm. Commit pnpm-lock.yaml when making dependency changes.
 - Keep src/core pure: no network/filesystem calls, environment reads, timers,
@@ -16,6 +16,7 @@ is a scaffold with function stubs.
   params. Keep account tokens and runtime logs in gitignored local storage.
 - Check current official Twitch docs before implementing provider calls; the
   spec is a product plan, not an authoritative API reference.
-- Run pnpm typecheck and pnpm build for scaffold changes. Once tests exist,
-  also run pnpm test. Update the README to distinguish scaffolding from working
-  behavior.
+- Run pnpm typecheck, pnpm test and pnpm build for implementation changes.
+  Distinguish local/mock verification from real Twitch channel verification.
+- Publish features through separate pull requests, verify their checks, and
+  merge them to main, as requested by the repository owner.
